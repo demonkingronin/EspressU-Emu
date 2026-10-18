@@ -1,0 +1,94 @@
+name: Build EspressU AirPlay IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build unsigned iOS IPA
+    runs-on: xcode-27
+    timeout-minutes: 360
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      VCPKG_MAX_CONCURRENCY: "2"
+
+    steps:
+      - name: Check out source and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Show build environment
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          df -h .
+
+      - name: Install required build tools
+        run: |
+          set -euo pipefail
+          brew install cmake ninja xcodegen pkg-config autoconf automake libtool
+          xcodebuild -downloadComponent MetalToolchain
+
+      - name: Build StikJIT dependency
+        run: |
+          set -euo pipefail
+          bash ci/build-stikjit.sh
+
+      - name: Compile Cemu iOS core
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-ios -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DVCPKG_TARGET_TRIPLET=arm64-ios \
+            -DBUILD_HEADLESS_DYLIB=ON \
+            -DCMAKE_MACOSX_BUNDLE=OFF \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-ios --target CemuBin --parallel 2
+          test -d build-ios/src/Cemu.framework
+          mkdir -p build-ios/out
+          cp -R build-ios/src/Cemu.framework build-ios/out/Cemu.framework
+
+      - name: Compile unsigned EspressU iOS application
+        run: |
+          set -euo pipefail
+          cd src/ios
+          xcodegen generate
+          xcodebuild \
+            -project EspressU.xcodeproj \
+            -scheme EspressU \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath "$GITHUB_WORKSPACE/build-derived" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          app="$GITHUB_WORKSPACE/build-derived/Build/Products/Release-iphoneos/EspressU.app"
+          test -d "$app"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          ditto "$app" "$RUNNER_TEMP/Payload/EspressU.app"
+          (
+            cd "$RUNNER_TEMP"
+            /usr/bin/zip -qry "$GITHUB_WORKSPACE/EspressU-AirPlay-unsigned.ipa" Payload
+          )
+          test -s "$GITHUB_WORKSPACE/EspressU-AirPlay-unsigned.ipa"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: EspressU-AirPlay-unsigned
+          path: EspressU-AirPlay-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
