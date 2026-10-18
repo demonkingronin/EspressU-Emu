@@ -1,6 +1,11 @@
 name: Build EspressU AirPlay IPA
 
+# This workflow lives only on the development branch; manual dispatch
+# requires a copy on the default branch, so use a branch-specific push.
 on:
+  push:
+    branches:
+      - airplay-tv-gamepad
   workflow_dispatch:
 
 permissions:
