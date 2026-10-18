@@ -299,6 +299,17 @@ extension EspressUSettingsView {
                                        control: .toggle(values.bool(LocalScreenLayoutSettings.showSwapButtonKey,
                                                                     LocalScreenLayoutSettings.defaultShowSwapButton))))
         }
+        screen.append(SettingsItem(
+            id: "screen.externalDisplay",
+            title: "Use separate external display",
+            detail: "Experimental. Enable before connecting an AirPlay TV. Requires a separate TV display scene; mirroring alone cannot separate the pictures.",
+            control: .toggle(values.bool(ExternalDisplaySystemSettings.enabledKey,
+                                         ExternalDisplaySystemSettings.defaultEnabled) { _ in
+                Task { @MainActor in
+                    DisplayRouter.shared.reapplyForExternalDisplaySystemToggle()
+                }
+            })
+        ))
         screen += [
             SettingsItem(id: "screen.boost", title: "Brightness boost",
                          detail: "Lightens the picture beyond the screen's maximum.",
