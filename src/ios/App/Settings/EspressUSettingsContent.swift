@@ -355,10 +355,45 @@ extension EspressUSettingsView {
                          control: .toggle(values.bool(MenuMusic.respectSilentModeKey, false) { _ in MenuMusic.shared.restart() })),
         ]
 
-        return [
-            SettingsGroup(id: "screen", title: "Screen", items: screen),
-            SettingsGroup(id: "sound", title: "Sound", items: sound),
-        ]
+        let externalDisplayEnabled = defaults.object(forKey: ExternalDisplaySystemSettings.enabledKey) as? Bool
+            ?? ExternalDisplaySystemSettings.defaultEnabled
+        var externalItems: [SettingsItem] = []
+
+        if externalDisplayEnabled {
+            externalItems.append(SettingsItem(
+                id: "external.swap",
+                title: "Show Wii U GamePad picture on TV",
+                detail: "Off: the TV shows the main Wii U game picture (recommended).",
+                control: .toggle(values.bool(DisplayLayoutSettings.swapKey,
+                                             DisplayLayoutSettings.defaultSwap) { _ in
+                    Task { @MainActor in
+                        DisplayRouter.shared.rerouteForScreenLayoutChange()
+                    }
+                })
+            ))
+            externalItems.append(SettingsItem(
+                id: "external.phoneMode",
+                title: "iPhone screen while connected",
+                detail: "GamePad picture keeps the Wii U touch screen available. Controls only hides the picture but keeps virtual buttons.",
+                control: .choice([
+                    SettingsOption(id: DeviceScreenMode.otherScreen.rawValue, title: "Wii U GamePad picture"),
+                    SettingsOption(id: DeviceScreenMode.nothing.rawValue, title: "Virtual controls only"),
+                    SettingsOption(id: DeviceScreenMode.sameScreen.rawValue, title: "Same picture as TV"),
+                ], values.string(DisplayLayoutSettings.deviceShowsKey,
+                                 DisplayLayoutSettings.defaultDeviceShows.rawValue) { _ in
+                    Task { @MainActor in
+                        DisplayRouter.shared.rerouteForScreenLayoutChange()
+                    }
+                })
+            ))
+        }
+
+        var groups = [SettingsGroup(id: "screen", title: "Screen", items: screen)]
+        if !externalItems.isEmpty {
+            groups.append(SettingsGroup(id: "external", title: "TV & AirPlay", items: externalItems))
+        }
+        groups.append(SettingsGroup(id: "sound", title: "Sound", items: sound))
+        return groups
     }
 
     private var screenSoundAdvanced: [SettingsItem] {
