@@ -75,10 +75,16 @@ enum WiiUKeys {
 
     @discardableResult
     static func importKeys(from source: URL) throws -> Int {
-        guard source.startAccessingSecurityScopedResource() else {
-            throw ImportError.accessDenied
+        // DocumentImport currently requests a local copy of the selected file.
+        // Local sandbox copies are readable without a security-scoped grant;
+        // startAccessingSecurityScopedResource() can legitimately return false.
+        // For an external provider URL, acquire and release the grant when available.
+        let didStartSecurityScope = source.startAccessingSecurityScopedResource()
+        defer {
+            if didStartSecurityScope {
+                source.stopAccessingSecurityScopedResource()
+            }
         }
-        defer { source.stopAccessingSecurityScopedResource() }
 
         let attributes = try? FileManager.default.attributesOfItem(atPath: source.path)
         if let size = attributes?[.size] as? Int, size > maximumFileSize {
